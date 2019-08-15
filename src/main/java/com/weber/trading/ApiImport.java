@@ -3,21 +3,19 @@ package com.weber.trading;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.lang.reflect.Type;
 import java.net.*;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Arrays;
-import java.util.Map;
-
 import org.ta4j.core.TimeSeries;
 
 import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
 
 public class ApiImport {
 	
 	// Function to get api data from tiingo and convert it into trading bars that can be added to a trading series.
-	public String getData(String stockSymbol, TimeSeries series) {
+	public TimeSeries getData(String stockSymbol, TimeSeries series) {
 		String url = "https://api.tiingo.com/iex/" + stockSymbol + "/prices?startDate=2019-08-07&resampleFreq=1min";
 
 		try {
@@ -49,22 +47,20 @@ public class ApiImport {
 						
 			Gson gson = new Gson();
 			TradingBar[] data = gson.fromJson(jsonResponse, TradingBar[].class);
+			DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
 			
 			for (int i = 0; i < data.length; i++) {
-				System.out.format("%30s %15s %15s %15s %15s",
-						"Date: " + data[i].getDate(),
-						"Open: " + data[i].getOpen(),
-						"High: " + data[i].getHigh(),
-						"Low: " + data[i].getLow(),
-						"Close: " + data[i].getClose()
+				LocalDateTime time = LocalDateTime.parse(data[i].getDate(), formatter);
+				
+				series.addBar(
+						ZonedDateTime.of(time, ZoneId.of("Europe/Berlin")),
+						Double.parseDouble(data[i].getOpen()),
+						Double.parseDouble(data[i].getHigh()),
+						Double.parseDouble(data[i].getLow()),
+						Double.parseDouble(data[i].getClose())
 						);
-		        System.out.println();
-			}
-						
-			// {"date":"2019-08-08T19:59:00.000Z","open":46.78,"high":46.8,"low":46.73,"close":46.775}
-			DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
-			
-			return response.toString();
+			}		
+			return series;
 		} catch (MalformedURLException e) {
 			e.printStackTrace();
 		} catch (IOException e) {
