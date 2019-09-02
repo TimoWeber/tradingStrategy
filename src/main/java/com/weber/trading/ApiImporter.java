@@ -12,7 +12,7 @@ import org.ta4j.core.TimeSeries;
 
 import com.google.gson.Gson;
 
-public class ApiImport {
+public class ApiImporter {
 	
 	// Function to get api data from tiingo and convert it into trading bars that can be added to a trading series.
 	public TimeSeries getData(String stockSymbol, TimeSeries series) {

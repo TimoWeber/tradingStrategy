@@ -2,124 +2,56 @@ package com.weber.trading;
 
 import org.ta4j.core.*;
 import org.ta4j.core.analysis.criteria.*;
-import org.ta4j.core.indicators.RSIIndicator;
-import org.ta4j.core.indicators.SMAIndicator;
-import org.ta4j.core.indicators.helpers.*;
-import org.ta4j.core.trading.rules.*;
-import java.io.BufferedReader;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
-import java.io.IOException;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
+
+import com.weber.trading.TradingStrategies.CCICorrectionStrategy;
+import com.weber.trading.TradingStrategies.TwoPeriodRsiStrategy;
+
 import java.util.List;
 
 
 public class Main {
 	public static void main(String[] args) {
 		Main main = new Main();
-		TimeSeries series = new BaseTimeSeries.SeriesBuilder().withName("test_series").build();
-		main.fillTimeSerie(series);
-		System.out.println();
-		System.out.println("Initial bar count: " + series.getBarCount());
+		TimeSeries csvSeries = new BaseTimeSeries.SeriesBuilder().withName("test_series").build();
 		
-		Strategy strategy = main.buildStrategy(series);
-		
-		TimeSeriesManager seriesManager = new TimeSeriesManager(series);
-		TradingRecord tradingRecord = seriesManager.run(strategy);
-		main.getResult(tradingRecord, series);
-		
-		
-		series = new BaseTimeSeries.SeriesBuilder().withName("test_series").build();
-		
-		
-		ApiImport apiImport = new ApiImport();
-		series = apiImport.getData("dow", series);
+		CsvImporter csvImporter = new CsvImporter();
+		csvSeries = csvImporter.fillTimeSerie(csvSeries);
 		
 		System.out.println();
-		System.out.println("Initial bar count: " + series.getBarCount());
+		System.out.println("CSV analysis:");
+		System.out.println("Initial bar count: " + csvSeries.getBarCount());
 		
-		strategy = main.buildStrategy(series);
+		Strategy csvRsiStrategy = new TwoPeriodRsiStrategy().buildStrategy(csvSeries);
 		
-		seriesManager = new TimeSeriesManager(series);
-		tradingRecord = seriesManager.run(strategy);
-		main.getResult(tradingRecord, series);
-	}
-	
-	// This function reads data from a csv file and adds them to the time series.
-	private void fillTimeSerie(TimeSeries series) {
-		String fileSource = "B:/eclipse/workspace/stock_market_checker/src/stock_market_checker/EURUSD_Candlestick_1_h_BID_16.07.2015-04.08.2018.csv";
-		String line = "";
-		String splitAt = ",";
+		TimeSeriesManager seriesManager = new TimeSeriesManager(csvSeries);
+		TradingRecord tradingRecord = seriesManager.run(csvRsiStrategy);
+		main.getResult(tradingRecord, csvSeries);
 		
-		/**
-		 * data[0] -	Local Time	-	16.07.2015 00:00:00.000 GMT+0200
-		 * data[1] -	Open		-	1.09461
-		 * data[2] -	High		-	1.09595
-		 * data[3] -	Low			-	1.09412
-		 * data[4] -	Close		-	1.09587
-		 * data[5] -	Volume		-	2945.47
-		 */
-		try {
-			BufferedReader br = new BufferedReader(new FileReader(fileSource));
-			int x = 0;
-			DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss.SSS");
-			while (((line = br.readLine()) != null) && x < 1000) {
-				String data[] = line.split(splitAt);
-				
-				data[0] = data[0].replace(" GMT+0200", "");
-				data[0] = data[0].replace(" GMT+0100", "");
+		TimeSeries ApiSeries = new BaseTimeSeries.SeriesBuilder().withName("test_series").build();
+		
+		ApiImporter apiImporter = new ApiImporter();
+		ApiSeries = apiImporter.getData("dow", ApiSeries);
+		
+		System.out.println();
+		System.out.println("API analysis:");
+		System.out.println("Initial bar count: " + ApiSeries.getBarCount());
+		
+		//strategy = main.buildStrategy(series);
+		Strategy rsiStrategy = new TwoPeriodRsiStrategy().buildStrategy(ApiSeries);
+		Strategy cciStrategy = new CCICorrectionStrategy().buildStrategy(ApiSeries);
+		
+		seriesManager = new TimeSeriesManager(ApiSeries);
+		System.out.println("2 Period RSI Strategy:");
+		tradingRecord = seriesManager.run(rsiStrategy);
+		main.getResult(tradingRecord, ApiSeries);
 
-				LocalDateTime time = LocalDateTime.parse(data[0], formatter);
-				series.addBar(ZonedDateTime.of(time, ZoneId.of("Europe/Berlin")),
-							Double.parseDouble(data[1]),
-							Double.parseDouble(data[2]),
-							Double.parseDouble(data[3]),
-							Double.parseDouble(data[4]),
-							Double.parseDouble(data[5])
-							);
-				x++;
-			}
-			br.close();
-		} catch (FileNotFoundException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-	}
-	
-	private Strategy buildStrategy(TimeSeries series) {
-		if (series == null) {
-            throw new IllegalArgumentException("Series cannot be null");
-        }
-
-		ClosePriceIndicator closePrice = new ClosePriceIndicator(series);
-        SMAIndicator shortSma = new SMAIndicator(closePrice, 5);
-        SMAIndicator longSma = new SMAIndicator(closePrice, 200);
-
-        // We use a 2-period RSI indicator to identify buying
-        // or selling opportunities within the bigger trend.
-        RSIIndicator rsi = new RSIIndicator(closePrice, 2);
-        
-        // Entry rule
-        // The long-term trend is up when a security is above its 200-period SMA.
-        Rule entryRule = new OverIndicatorRule(shortSma, longSma) // Trend
-                .and(new CrossedDownIndicatorRule(rsi, 5)) // Signal 1
-                .and(new OverIndicatorRule(shortSma, closePrice)); // Signal 2
-        
-        // Exit rule
-        // The long-term trend is down when a security is below its 200-period SMA.
-        Rule exitRule = new UnderIndicatorRule(shortSma, longSma) // Trend
-                .and(new CrossedUpIndicatorRule(rsi, 95)) // Signal 1
-                .and(new UnderIndicatorRule(shortSma, closePrice)); // Signal 2
-                
-        return new BaseStrategy(entryRule, exitRule);
+		System.out.println();
+		System.out.println("CCI Strategy:");
+		tradingRecord = seriesManager.run(cciStrategy);
+		main.getResult(tradingRecord, ApiSeries);
 	}
 	
 	private void getResult(TradingRecord tradingRecord, TimeSeries series) {
-		AnalysisCriterion criterion = new TotalProfitCriterion();
 		List<Trade> trades = tradingRecord.getTrades();
 		
 		System.out.println("---------------------------");
@@ -135,12 +67,28 @@ public class Main {
 	        System.out.println();
 		    System.out.println("---------------------------");
 	    }
-	    
-	    System.out.println("Criterion Calculate: " + criterion.calculate(series, tradingRecord));
-		System.out.println("Trade Count: " + tradingRecord.getTradeCount());
-		// Reward-risk ratio
-        System.out.println("Reward-risk ratio: " + new RewardRiskRatioCriterion().calculate(series, tradingRecord));
+
+	    System.out.println();
+	    // Total profit
+        TotalProfitCriterion totalProfit = new TotalProfitCriterion();
+        System.out.println("Total profit: " + totalProfit.calculate(series, tradingRecord));
+        // Number of bars
+        System.out.println("Number of bars: " + new NumberOfBarsCriterion().calculate(series, tradingRecord));
+        // Average profit (per bar)
+        System.out.println("Average profit (per bar): " + new AverageProfitCriterion().calculate(series, tradingRecord));
+        // Number of trades
+        System.out.println("Number of trades: " + new NumberOfTradesCriterion().calculate(series, tradingRecord));
         // Profitable trades ratio
         System.out.println("Profitable trades ratio: " + new AverageProfitableTradesCriterion().calculate(series, tradingRecord));
+        // Maximum drawdown
+        System.out.println("Maximum drawdown: " + new MaximumDrawdownCriterion().calculate(series, tradingRecord));
+        // Reward-risk ratio
+        System.out.println("Reward-risk ratio: " + new RewardRiskRatioCriterion().calculate(series, tradingRecord));
+        // Total transaction cost
+        System.out.println("Total transaction cost (from $1000): " + new LinearTransactionCostCriterion(1000, 0.005).calculate(series, tradingRecord));
+        // Buy-and-hold
+        System.out.println("Buy-and-hold: " + new BuyAndHoldCriterion().calculate(series, tradingRecord));
+        // Total profit vs buy-and-hold
+        System.out.println("Custom strategy profit vs buy-and-hold strategy profit: " + new VersusBuyAndHoldCriterion(totalProfit).calculate(series, tradingRecord));
 	}
 }
